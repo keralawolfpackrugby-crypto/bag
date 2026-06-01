@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BagLux — Premium Bag Collection</title>
+  <meta name="description" content="Discover our handpicked collection of premium leather bags, totes, crossbodies and more." />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="payment.css" />
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="index.html" class="nav-logo">
+    <div class="icon">👜</div>
+    <span>Bag<em>Lux</em></span>
+  </a>
+  <div class="nav-links">
+    <a href="index.html" class="active">Shop</a>
+    <button class="btn btn-primary" id="cartBtn" onclick="openCart()">
+      🛒 Cart <span id="cartCount" style="background:#fff;color:#a07840;border-radius:50px;padding:1px 7px;font-size:0.8rem;margin-left:4px;">0</span>
+    </button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-badge">✦ New Arrivals Every Week</div>
+  <h1>Carry Your <span>Style</span><br>With Confidence</h1>
+  <p>Handcrafted bags for every occasion. Premium leather. Timeless design.</p>
+  <button class="btn btn-primary" onclick="document.getElementById('shop').scrollIntoView({behavior:'smooth'})">Shop Now →</button>
+</section>
+
+<!-- FILTER BAR -->
+<div class="filter-bar" id="filterBar">
+  <button class="filter-btn active" data-cat="All" onclick="filterProducts('All',this)">All</button>
+  <button class="filter-btn" data-cat="Tote" onclick="filterProducts('Tote',this)">Tote</button>
+  <button class="filter-btn" data-cat="Crossbody" onclick="filterProducts('Crossbody',this)">Crossbody</button>
+  <button class="filter-btn" data-cat="Satchel" onclick="filterProducts('Satchel',this)">Satchel</button>
+  <button class="filter-btn" data-cat="Clutch" onclick="filterProducts('Clutch',this)">Clutch</button>
+  <button class="filter-btn" data-cat="Duffel" onclick="filterProducts('Duffel',this)">Duffel</button>
+  <button class="filter-btn" data-cat="Backpack" onclick="filterProducts('Backpack',this)">Backpack</button>
+</div>
+
+<!-- PRODUCT GRID -->
+<div id="shop">
+  <h2 class="section-title">Our <span>Collection</span></h2>
+  <div class="products-grid" id="productGrid"></div>
+</div>
+
+<!-- CART SIDEBAR -->
+<div class="cart-overlay" id="cartOverlay" onclick="closeCart()"></div>
+<div class="cart-sidebar" id="cartSidebar">
+  <div class="cart-header">
+    <h2>🛒 Your Cart</h2>
+    <button class="close-cart" onclick="closeCart()">✕</button>
+  </div>
+  <div class="cart-items" id="cartItems"></div>
+  <div class="cart-footer">
+    <div class="cart-total">
+      <span>Total</span>
+      <span id="cartTotal">₹0</span>
+    </div>
+    <button class="btn btn-primary" style="width:100%;padding:0.9rem;" onclick="checkout()">🔒 Proceed to Pay →</button>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="app.js"></script>
+<script>
+  let currentFilter = 'All';
+
+  // Init
+  seedSampleData();
+  renderGrid();
+  updateCartBadge();
+
+  // Listen for seller updates (cross-tab)
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY) renderGrid();
+  });
+
+  function renderGrid() {
+    const products = getProducts();
+    const grid = document.getElementById('productGrid');
+    const filtered = currentFilter === 'All'
+      ? products
+      : products.filter(p => p.category === currentFilter);
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">🛍️</div>
+        <h3>No bags found</h3>
+        <p>Check back soon or browse another category.</p>
+      </div>`;
+      return;
+    }
+
+    grid.innerHTML = filtered.map(p => `
+      <div class="product-card" id="card-${p.id}">
+        <div class="card-img-wrap">
+          <img class="card-image" src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/400x300/1a1a1a/c9a96e?text=Bag'" />
+          ${p.badge ? `<div class="card-badge">${p.badge}</div>` : ''}
+        </div>
+        <div class="card-body">
+          <div class="card-category">${p.category}</div>
+          <div class="card-name">${p.name}</div>
+          <div class="card-desc">${p.description || 'Premium quality bag.'}</div>
+          <div class="card-footer">
+            <div class="card-price">₹${Number(p.price).toLocaleString('en-IN')}</div>
+            <button class="add-to-cart" onclick="addToCart('${p.id}')">Add to Cart</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function filterProducts(cat, btn) {
+    currentFilter = cat;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderGrid();
+  }
+
+  // ── CART ──
+  function addToCart(productId) {
+    const products = getProducts();
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+
+    let cart = getCart();
+    const existing = cart.find(c => c.id === productId);
+    if (existing) {
+      existing.qty++;
+    } else {
+      cart.push({ ...product, qty: 1 });
+    }
+    saveCart(cart);
+    updateCartBadge();
+    showToast(`"${product.name}" added to cart! 🛒`);
+  }
+
+  function updateCartBadge() {
+    const cart = getCart();
+    const total = cart.reduce((s, i) => s + i.qty, 0);
+    document.getElementById('cartCount').textContent = total;
+  }
+
+  function openCart() {
+    renderCartSidebar();
+    document.getElementById('cartSidebar').classList.add('open');
+    document.getElementById('cartOverlay').classList.add('open');
+  }
+
+  function closeCart() {
+    document.getElementById('cartSidebar').classList.remove('open');
+    document.getElementById('cartOverlay').classList.remove('open');
+  }
+
+  function renderCartSidebar() {
+    const cart = getCart();
+    const itemsEl = document.getElementById('cartItems');
+    const totalEl = document.getElementById('cartTotal');
+
+    if (cart.length === 0) {
+      itemsEl.innerHTML = `<div class="empty-state" style="padding:3rem 1rem;">
+        <div class="empty-icon">🛒</div>
+        <h3>Your cart is empty</h3>
+        <p>Add some beautiful bags!</p>
+      </div>`;
+      totalEl.textContent = '₹0';
+      return;
+    }
+
+    itemsEl.innerHTML = cart.map(item => `
+      <div class="cart-item" id="ci-${item.id}">
+        <img src="${item.image}" alt="${item.name}" onerror="this.src='https://via.placeholder.com/60x60/1a1a1a/c9a96e?text=Bag'" />
+        <div class="cart-item-info">
+          <div class="cart-item-name">${item.name}</div>
+          <div class="cart-item-price">₹${Number(item.price).toLocaleString('en-IN')}</div>
+          <div class="cart-item-qty">
+            <button class="qty-btn" onclick="changeQty('${item.id}',-1)">−</button>
+            <span>${item.qty}</span>
+            <button class="qty-btn" onclick="changeQty('${item.id}',1)">+</button>
+          </div>
+        </div>
+        <button class="remove-item" onclick="removeFromCart('${item.id}')" title="Remove">✕</button>
+      </div>
+    `).join('');
+
+    const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
+    totalEl.textContent = '₹' + total.toLocaleString('en-IN');
+  }
+
+  function changeQty(id, delta) {
+    let cart = getCart();
+    const item = cart.find(c => c.id === id);
+    if (!item) return;
+    item.qty += delta;
+    if (item.qty <= 0) cart = cart.filter(c => c.id !== id);
+    saveCart(cart);
+    updateCartBadge();
+    renderCartSidebar();
+  }
+
+  function removeFromCart(id) {
+    let cart = getCart().filter(c => c.id !== id);
+    saveCart(cart);
+    updateCartBadge();
+    renderCartSidebar();
+    showToast('Item removed from cart', 'error');
+  }
+
+  function checkout() {
+    const cart = getCart();
+    if (cart.length === 0) { showToast('Your cart is empty!', 'error'); return; }
+    closeCart();
+    openPaymentGateway();
+  }
+</script>
+
+<!-- ═══════════════ PAYMENT GATEWAY MODAL ═══════════════ -->
+<div class="pay-overlay" id="payOverlay">
+  <div class="pay-modal">
+
+    <!-- LEFT: Order Summary -->
+    <div class="pay-left">
+      <div class="pay-brand">
+        <div class="icon">👜</div>
+        <span>Bag<em>Lux</em></span>
+      </div>
+      <div class="pay-order-title">Order Summary</div>
+      <div class="pay-amount" id="payTotal">₹0</div>
+      <div class="pay-items-count" id="payItemCount">0 items</div>
+      <div class="pay-items-list" id="payItemsList"></div>
+      <div class="pay-secure">🔒 256-bit SSL encrypted · Secure Checkout</div>
+    </div>
+
+    <!-- RIGHT: Payment Form -->
+    <div class="pay-right">
+      <button class="pay-close" onclick="closePaymentGateway()">✕</button>
+      <h2>Complete Your Payment</h2>
+
+      <!-- TABS -->
+      <div class="pay-tabs">
+        <button class="pay-tab" id="tab-card"       onclick="switchPayTab('card')">💳 Card</button>
+        <button class="pay-tab" id="tab-upi"        onclick="switchPayTab('upi')">📱 UPI</button>
+        <button class="pay-tab" id="tab-netbanking" onclick="switchPayTab('netbanking')">🏦 Net Banking</button>
+        <button class="pay-tab" id="tab-wallet"     onclick="switchPayTab('wallet')">👛 Wallet</button>
+      </div>
+
+      <div id="payFormArea">
+
+        <!-- CARD -->
+        <div class="pay-panel" id="panel-card">
+          <div class="card-logos">
+            <span>VISA</span><span>MC</span><span>AMEX</span><span>RUPAY</span>
+          </div>
+          <div class="pf-group">
+            <label>Cardholder Name</label>
+            <input id="pcName" type="text" placeholder="Name on card" autocomplete="cc-name" />
+          </div>
+          <div class="pf-group">
+            <label>Card Number</label>
+            <input id="pcNumber" type="text" placeholder="1234 5678 9012 3456" maxlength="19" oninput="fmtCard(this)" autocomplete="cc-number" />
+          </div>
+          <div class="pf-row">
+            <div class="pf-group">
+              <label>Expiry</label>
+              <input id="pcExpiry" type="text" placeholder="MM/YY" maxlength="5" oninput="fmtExpiry(this)" autocomplete="cc-exp" />
+            </div>
+            <div class="pf-group">
+              <label>CVV</label>
+              <input id="pcCVV" type="password" placeholder="•••" maxlength="4" oninput="fmtCVV(this)" autocomplete="cc-csc" />
+            </div>
+          </div>
+        </div>
+
+        <!-- UPI -->
+        <div class="pay-panel" id="panel-upi">
+          <div class="upi-apps">
+            <div class="upi-app" onclick="selectUPI(this)"><div class="upi-icon">🟢</div>GPay</div>
+            <div class="upi-app" onclick="selectUPI(this)"><div class="upi-icon">🔵</div>PhonePe</div>
+            <div class="upi-app" onclick="selectUPI(this)"><div class="upi-icon">🟠</div>Paytm</div>
+            <div class="upi-app" onclick="selectUPI(this)"><div class="upi-icon">🔴</div>BHIM</div>
+          </div>
+          <div class="pf-group">
+            <label>Or Enter UPI ID</label>
+            <input id="pupiId" type="text" placeholder="yourname@upi" />
+          </div>
+        </div>
+
+        <!-- NET BANKING -->
+        <div class="pay-panel" id="panel-netbanking">
+          <div class="bank-grid">
+            <div class="bank-opt" onclick="selectBank(this)"><span class="b-icon">🏛️</span>SBI</div>
+            <div class="bank-opt" onclick="selectBank(this)"><span class="b-icon">🏦</span>HDFC</div>
+            <div class="bank-opt" onclick="selectBank(this)"><span class="b-icon">🏦</span>ICICI</div>
+            <div class="bank-opt" onclick="selectBank(this)"><span class="b-icon">🏦</span>Axis</div>
+            <div class="bank-opt" onclick="selectBank(this)"><span class="b-icon">🏦</span>Kotak</div>
+            <div class="bank-opt" onclick="selectBank(this)"><span class="b-icon">🏦</span>PNB</div>
+          </div>
+        </div>
+
+        <!-- WALLET -->
+        <div class="pay-panel" id="panel-wallet">
+          <div class="wallet-grid">
+            <div class="wallet-opt" onclick="selectWallet(this)"><div class="w-icon">🔵</div>Paytm</div>
+            <div class="wallet-opt" onclick="selectWallet(this)"><div class="w-icon">🟣</div>Mobikwik</div>
+            <div class="wallet-opt" onclick="selectWallet(this)"><div class="w-icon">🟠</div>Amazon Pay</div>
+            <div class="wallet-opt" onclick="selectWallet(this)"><div class="w-icon">🔴</div>Airtel</div>
+            <div class="wallet-opt" onclick="selectWallet(this)"><div class="w-icon">🟢</div>JioMoney</div>
+            <div class="wallet-opt" onclick="selectWallet(this)"><div class="w-icon">⚪</div>FreeCharge</div>
+          </div>
+        </div>
+
+        <button class="pay-btn" onclick="processPayment()">
+          🔒 Pay <span id="payBtnAmount">₹0</span>
+        </button>
+        <p class="pay-note">Your payment is 100% secure. We do not store card details.</p>
+      </div>
+
+      <!-- PROCESSING -->
+      <div class="pay-processing" id="payProcessing">
+        <div class="spinner"></div>
+        <div class="processing-text">Processing your payment…</div>
+        <div class="processing-sub">Please do not close or refresh this page.</div>
+      </div>
+
+      <!-- SUCCESS -->
+      <div class="pay-success" id="paySuccess">
+        <div class="success-circle">✓</div>
+        <div class="success-title">Payment Successful! 🎉</div>
+        <div class="success-sub">Your order has been placed. Thank you for shopping with BagLux!</div>
+        <div class="order-id-box" id="successOrderId">Order ID: —</div>
+        <button class="pay-btn" style="max-width:280px;" onclick="closePaymentGateway()">Continue Shopping →</button>
+      </div>
+
+    </div><!-- /pay-right -->
+  </div><!-- /pay-modal -->
+</div><!-- /pay-overlay -->
+
+<script src="payment.js"></script>
+</body>
+</html>

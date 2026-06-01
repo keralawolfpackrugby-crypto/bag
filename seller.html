@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BagLux — Seller Dashboard</title>
+  <meta name="description" content="Manage your bag listings on BagLux seller portal." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="index.html" class="nav-logo">
+    <div class="icon">👜</div>
+    <span>Bag<em>Lux</em></span>
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Customer Shop</a>
+    <a href="seller.html" class="active">Seller Portal</a>
+  </div>
+</nav>
+
+<!-- DASHBOARD -->
+<div class="dashboard">
+
+  <div class="dashboard-header">
+    <h1>Seller Dashboard 🏪</h1>
+    <p>Add and manage your bag listings — changes appear live on the shop.</p>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card">
+      <div class="stat-icon">👜</div>
+      <div class="stat-info">
+        <p>Total Listings</p>
+        <h3 id="statTotal">0</h3>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📦</div>
+      <div class="stat-info">
+        <p>Categories</p>
+        <h3 id="statCats">0</h3>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">💰</div>
+      <div class="stat-info">
+        <p>Avg. Price</p>
+        <h3 id="statAvg">₹0</h3>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">⭐</div>
+      <div class="stat-info">
+        <p>Newest Item</p>
+        <h3 id="statNewest" style="font-size:1rem;padding-top:4px;">—</h3>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+
+    <!-- ADD PRODUCT FORM -->
+    <div class="form-card">
+      <h2>➕ Add New Bag</h2>
+
+      <form id="productForm" onsubmit="handleSubmit(event)">
+
+        <div class="form-group">
+          <label>Bag Name *</label>
+          <input type="text" id="bagName" placeholder="e.g. Luxe Leather Tote" required />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Price (₹) *</label>
+            <input type="number" id="bagPrice" placeholder="1999" min="1" required />
+          </div>
+          <div class="form-group">
+            <label>Category *</label>
+            <select id="bagCategory" required>
+              <option value="" disabled selected>Select…</option>
+              <option>Tote</option>
+              <option>Crossbody</option>
+              <option>Satchel</option>
+              <option>Clutch</option>
+              <option>Duffel</option>
+              <option>Backpack</option>
+              <option>Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="bagDesc" placeholder="Short description of the bag…"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Badge / Label (optional)</label>
+          <select id="bagBadge">
+            <option value="">None</option>
+            <option>New</option>
+            <option>Best Seller</option>
+            <option>Trending</option>
+            <option>Sale</option>
+            <option>Premium</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Bag Image *</label>
+          <div class="image-upload-area" id="dropZone"
+               onclick="document.getElementById('bagImage').click()"
+               ondragover="onDragOver(event)"
+               ondragleave="onDragLeave(event)"
+               ondrop="onDrop(event)">
+            <input type="file" id="bagImage" accept="image/*" onchange="handleImageFile(this.files[0])" />
+            <div id="uploadPlaceholder">
+              <div class="upload-icon">📷</div>
+              <div class="upload-text">Drag & drop or <span>click to browse</span></div>
+              <div class="upload-text" style="font-size:0.78rem;margin-top:4px;">JPG, PNG, WEBP — max 5 MB</div>
+            </div>
+            <img id="imgPreview" class="img-preview" alt="Preview" />
+          </div>
+          <!-- OR paste URL -->
+          <div style="margin-top:0.7rem;">
+            <input type="url" id="bagImageUrl" placeholder="Or paste image URL…" style="width:100%;background:var(--bg-dark);border:1.5px solid var(--border);border-radius:10px;padding:0.7rem 1rem;color:var(--text);font-family:'Outfit',sans-serif;font-size:0.9rem;outline:none;" oninput="previewUrl(this.value)" />
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width:100%;padding:0.9rem;" id="submitBtn">
+          🚀 Publish Listing
+        </button>
+      </form>
+    </div>
+
+    <!-- CURRENT LISTINGS -->
+    <div class="listings-card">
+      <h2>📋 Your Listings</h2>
+      <div id="listingsContainer"></div>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <h3>Delete Listing?</h3>
+    <p>This will permanently remove the bag from the shop. This cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="app.js"></script>
+<script>
+  let pendingDeleteId = null;
+  let imageBase64 = null; // from file upload
+
+  // Init
+  seedSampleData();
+  renderListings();
+  updateStats();
+
+  // ── IMAGE HANDLING ──
+  function handleImageFile(file) {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast('Image too large! Max 5 MB.', 'error'); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      imageBase64 = e.target.result;
+      showPreview(imageBase64);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function previewUrl(url) {
+    if (!url) return;
+    imageBase64 = null; // prefer file if both provided
+    showPreview(url);
+  }
+
+  function showPreview(src) {
+    const prev = document.getElementById('imgPreview');
+    const ph   = document.getElementById('uploadPlaceholder');
+    prev.src = src;
+    prev.style.display = 'block';
+    ph.style.display = 'none';
+  }
+
+  function onDragOver(e) {
+    e.preventDefault();
+    document.getElementById('dropZone').classList.add('dragging');
+  }
+
+  function onDragLeave() {
+    document.getElementById('dropZone').classList.remove('dragging');
+  }
+
+  function onDrop(e) {
+    e.preventDefault();
+    document.getElementById('dropZone').classList.remove('dragging');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) handleImageFile(file);
+  }
+
+  // ── SUBMIT ──
+  function handleSubmit(e) {
+    e.preventDefault();
+
+    const name     = document.getElementById('bagName').value.trim();
+    const price    = parseFloat(document.getElementById('bagPrice').value);
+    const category = document.getElementById('bagCategory').value;
+    const desc     = document.getElementById('bagDesc').value.trim();
+    const badge    = document.getElementById('bagBadge').value;
+    const urlField = document.getElementById('bagImageUrl').value.trim();
+
+    const image = imageBase64 || urlField;
+
+    if (!image) {
+      showToast('Please upload a photo or paste an image URL.', 'error');
+      return;
+    }
+
+    const product = {
+      id: 'p_' + Date.now(),
+      name, price, category, description: desc,
+      badge, image,
+      addedAt: Date.now()
+    };
+
+    const products = getProducts();
+    products.unshift(product); // newest first
+    saveProducts(products);
+    renderListings();
+    updateStats();
+    resetForm();
+    showToast(`"${name}" published to the shop! 🎉`);
+  }
+
+  function resetForm() {
+    document.getElementById('productForm').reset();
+    imageBase64 = null;
+    const prev = document.getElementById('imgPreview');
+    prev.style.display = 'none';
+    document.getElementById('uploadPlaceholder').style.display = 'block';
+  }
+
+  // ── RENDER LISTINGS ──
+  function renderListings() {
+    const products = getProducts();
+    const container = document.getElementById('listingsContainer');
+
+    if (products.length === 0) {
+      container.innerHTML = `<div class="no-listings">
+        <div style="font-size:3rem;margin-bottom:0.8rem;">📦</div>
+        <p>No listings yet. Add your first bag!</p>
+      </div>`;
+      return;
+    }
+
+    container.innerHTML = products.map(p => `
+      <div class="listing-item" id="li-${p.id}">
+        <img src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/64x64/1a1a1a/c9a96e?text=Bag'" />
+        <div class="listing-info">
+          <div class="listing-name">${p.name}</div>
+          <div class="listing-meta">${p.category} ${p.badge ? '· ' + p.badge : ''} · Added ${timeAgo(p.addedAt)}</div>
+        </div>
+        <div class="listing-price">₹${Number(p.price).toLocaleString('en-IN')}</div>
+        <div class="listing-actions">
+          <button class="icon-btn" title="Delete listing" onclick="confirmDelete('${p.id}')">🗑️</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ── STATS ──
+  function updateStats() {
+    const products = getProducts();
+    const cats = [...new Set(products.map(p => p.category))];
+    const avg = products.length
+      ? Math.round(products.reduce((s, p) => s + p.price, 0) / products.length)
+      : 0;
+    const newest = products.length ? products[0].name : '—';
+
+    document.getElementById('statTotal').textContent = products.length;
+    document.getElementById('statCats').textContent = cats.length;
+    document.getElementById('statAvg').textContent = '₹' + avg.toLocaleString('en-IN');
+    document.getElementById('statNewest').textContent = newest.length > 14 ? newest.slice(0,14)+'…' : newest;
+  }
+
+  // ── DELETE ──
+  function confirmDelete(id) {
+    pendingDeleteId = id;
+    document.getElementById('deleteModal').classList.add('open');
+    document.getElementById('confirmDeleteBtn').onclick = () => deleteListing(id);
+  }
+
+  function closeModal() {
+    document.getElementById('deleteModal').classList.remove('open');
+    pendingDeleteId = null;
+  }
+
+  function deleteListing(id) {
+    let products = getProducts().filter(p => p.id !== id);
+    saveProducts(products);
+    renderListings();
+    updateStats();
+    closeModal();
+    showToast('Listing deleted.', 'error');
+  }
+
+  // ── UTILS ──
+  function timeAgo(ts) {
+    const diff = Date.now() - ts;
+    const mins  = Math.floor(diff / 60000);
+    const hrs   = Math.floor(diff / 3600000);
+    const days  = Math.floor(diff / 86400000);
+    if (mins < 1)  return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    if (hrs < 24)  return `${hrs}h ago`;
+    return `${days}d ago`;
+  }
+</script>
+</body>
+</html>
